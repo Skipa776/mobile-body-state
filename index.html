@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en" data-page="post">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can your phone tell what your body is doing? · Joshua Do</title>
+<meta name="description" content="Predicting whether someone is lying down, sitting, standing, walking, running or bicycling from phone and smartwatch sensors in the ExtraSensory dataset.">
+<script>
+(function(h){var s;h.classList.add('js');try{if(localStorage.getItem('dp-motion')==='off')h.dataset.motion='off'}catch(e){}
+if(h.dataset.motion==='off'||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+h.classList.add('fx');
+try{s=sessionStorage.getItem('dp-curtain');if(s){sessionStorage.removeItem('dp-curtain');h.classList.add('entering');h.setAttribute('data-curtain',s);return}
+if(h.dataset.page==='home'&&!sessionStorage.getItem('dp-seen')){sessionStorage.setItem('dp-seen','1');h.classList.add('preload')}}catch(e){}
+})(document.documentElement);
+</script>
+<link rel="icon" href="assets/contact-photo.png" type="image/png">
+<link rel="stylesheet" href="assets/site.css">
+<script src="assets/site.js" defer onerror="document.documentElement.classList.remove('js','fx','preload','preloaded','hero-enter','entering','entered')"></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="progress" aria-hidden="true"></div>
+
+<main id="main">
+<article class="page" data-article>
+
+  <div class="slide__grid">
+    <div class="slide__body">
+      <h1>Can your phone tell what your body is doing?</h1>
+      <p class="meta">Joshua Do · November 2026</p>
+    </div>
+  </div>
+
+  <div class="prose">
+
+    <h2 id="introduction">Introduction</h2>
+    <p>The <a href="http://extrasensory.ucsd.edu">ExtraSensory dataset</a> was collected at UC San Diego in 2015 and 2016. Sixty volunteers carried their own phones through their normal days, and most of them also wore a smartwatch. About once a minute, an app recorded 20 seconds of sensor data and saved it as 225 summary features covering motion, rotation, compass direction, sound, location, light and phone state. The volunteers also reported what they were doing, using 51 labels. The dataset has 377,346 rows, one per person per minute.</p>
+    <p>We want to know whether a phone's motion sensors can tell what someone's body is doing (lying down, sitting, standing, walking, running or bicycling), including for people the model has never seen.</p>
+    <p>Phones have the same motion sensors robots use to track their own movement: an accelerometer, a gyroscope and a magnetometer. A robot that works next to people, like an exoskeleton or a care robot, needs to know whether the person is up and moving or lying down. On a phone, the same kind of model could power habit tracking.</p>
+    <p>The columns we use:</p>
+    <ul>
+      <li><code>label:LYING_DOWN</code>, <code>label:SITTING</code>, <code>label:OR_standing</code>, <code>label:FIX_walking</code>, <code>label:FIX_running</code>, <code>label:BICYCLING</code>: the body state the person reported for that minute (1 = yes, 0 = no, blank = not reported).</li>
+      <li><code>raw_acc:magnitude_stats:std</code>: phone shaking, or how much the phone's acceleration varied during the recording, in G.</li>
+      <li><code>watch_acceleration:magnitude_stats:std</code>: the same measure for the watch, in milli-G.</li>
+      <li><code>timestamp</code>: when the minute was recorded, in Unix seconds (UTC).</li>
+      <li><code>uuid</code>: an anonymous ID for each user.</li>
+    </ul>
+
+    <h2 id="data-cleaning-and-exploratory-data-analysis">Data Cleaning and Exploratory Data Analysis</h2>
+    <ul>
+      <li>We combined the six body-state labels into one column, <code>body_state</code>. No row has two body states. A blank label means the person didn't answer, so blanks stay missing instead of turning into 0.</li>
+      <li>We replaced impossible readings with missing values: 2,186 barometer readings of exactly 0 hPa, all from one user, and two negative autocorrelation periods in a single row.</li>
+      <li>We dropped 4 columns that have the same value in every row.</li>
+      <li>We converted timestamps to San Diego time and added <code>hour</code> and <code>weekday</code> columns.</li>
+      <li>We added each user's phone type. 34 users had iPhones and 26 had Androids.</li>
+      <li>We dropped the other 45 labels and <code>label_source</code>. People reported these at the same moment as their body state, so a model wouldn't have them when it makes a prediction.</li>
+      <li>We kept the 306,594 minutes that have a body state, which still covers all 60 users. Missing sensor values stay missing.</li>
+    </ul>
+    <p>The first rows of the cleaned data, showing 5 of its 227 columns:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>time</th><th>hour</th><th>body_state</th><th>phone shaking (G)</th><th>watch shaking (mG)</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">2015-10-05 14:06</th><td>14</td><td>sitting</td><td>0.0035</td><td>17.20</td></tr>
+          <tr><th scope="row">2015-10-05 14:07</th><td>14</td><td>sitting</td><td>0.0042</td><td>18.90</td></tr>
+          <tr><th scope="row">2015-10-05 14:08</th><td>14</td><td>sitting</td><td>0.0037</td><td>17.12</td></tr>
+          <tr><th scope="row">2015-10-05 14:09</th><td>14</td><td>sitting</td><td>0.0035</td><td>17.80</td></tr>
+          <tr><th scope="row">2015-10-05 14:10</th><td>14</td><td>sitting</td><td>0.0377</td><td>121.59</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Univariate analysis</h3>
+    <iframe src="assets/body-state-share.html" width="100%" height="440" frameborder="0"></iframe>
+    <p>Sitting (44.5%) and lying down (34.0%) make up almost 80% of minutes. Running is only 0.4%.</p>
+
+    <h3>Bivariate analysis</h3>
+    <iframe src="assets/shaking-by-state.html" width="100%" height="440" frameborder="0"></iframe>
+    <p>Walking, running and bicycling shake the phone 15 to 90 times more than the still states. Lying down, sitting and standing overlap a lot.</p>
+
+    <h3>Interesting aggregates</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>body state</th><th>minutes</th><th>users</th><th>median phone shaking (G)</th><th>median watch shaking (mG)</th><th>watch missing</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">lying down</th><td>104,210</td><td>58</td><td>0.0019</td><td>13.35</td><td>38%</td></tr>
+          <tr><th scope="row">sitting</th><td>136,356</td><td>60</td><td>0.0039</td><td>31.32</td><td>27%</td></tr>
+          <tr><th scope="row">standing</th><td>37,782</td><td>60</td><td>0.0070</td><td>72.37</td><td>30%</td></tr>
+          <tr><th scope="row">walking</th><td>22,136</td><td>60</td><td>0.1340</td><td>150.86</td><td>31%</td></tr>
+          <tr><th scope="row">running</th><td>1,090</td><td>26</td><td>0.0811</td><td>271.15</td><td>31%</td></tr>
+          <tr><th scope="row">bicycling</th><td>5,020</td><td>25</td><td>0.1620</td><td>248.71</td><td>26%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Watch shaking goes up steadily from lying down to running. Phone shaking doesn't: running comes out below walking.</p>
+
+    <h2 id="assessment-of-missingness">Assessment of Missingness</h2>
+    <p>We think the body-state labels are NMAR. 18.7% of minutes have no body state, and whether someone stops to answer probably depends on what they're doing. Someone in the middle of a workout or driving is less likely to answer than someone sitting at a desk. App logs showing which reminders people ignored could make this missingness MAR.</p>
+    <p>Watch shaking is missing in 31.5% of minutes. We ran two permutation tests on its missingness, with total variation distance (TVD) as the test statistic and a significance level of 0.05.</p>
+    <ul>
+      <li>Missingness appears to depend on <code>body_state</code>. The observed TVD is 0.0997, the largest of 1,000 shuffled TVDs is 0.0074, and the p-value is below 0.001.</li>
+      <li>We found no evidence that it depends on the minute of the hour. The observed TVD is 0.0063 and the p-value is 1.000.</li>
+    </ul>
+    <iframe src="assets/watch-missing.html" width="100%" height="440" frameborder="0"></iframe>
+
+    <h2 id="hypothesis-testing">Hypothesis Testing</h2>
+    <ul>
+      <li>Null hypothesis: among sitting and standing minutes, phone shaking has the same distribution, and any difference is due to random chance.</li>
+      <li>Alternative hypothesis: phone shaking tends to be higher when people are standing than when they are sitting.</li>
+      <li>Test statistic: the difference in median phone shaking, standing minus sitting. We use medians because phone shaking is heavily skewed.</li>
+      <li>Significance level: 0.05, with 1,000 shuffles of the sitting and standing labels.</li>
+    </ul>
+    <p>The observed difference is 0.00313 G, and the largest shuffled difference is 0.00013 G. The p-value is below 0.001, so we reject the null hypothesis. The data suggest phones tend to shake more when people stand than when they sit, and the pattern holds per user too: 41 of 60 users shake their phone more when standing (p-value 0.0029). The gap is small, though, and the two distributions overlap a lot.</p>
+    <iframe src="assets/permutation-test.html" width="100%" height="440" frameborder="0"></iframe>
+
+    <h2 id="framing-a-prediction-problem">Framing a Prediction Problem</h2>
+    <p>We predict each minute's body state from that minute's sensor readings. This is multiclass classification with six classes, and the response variable is <code>body_state</code>.</p>
+    <p>We score models with macro F1, the average of the six per-class F1 scores. Sitting and lying down are 78% of minutes, so a model could get high accuracy while ignoring the rare states. Macro F1 counts every state equally.</p>
+    <p>When a recording ends, we know its sensor readings, the hour and the phone type. We don't know any of the labels the person reported, so none of them are used as features.</p>
+    <p>We split by user, with 48 users (251,590 minutes) for training and 12 users (55,004 minutes) for testing. Every test score comes from people the model never saw.</p>
+
+    <h2 id="baseline-model">Baseline Model</h2>
+    <p>The baseline is a decision tree with a maximum depth of 8, inside one sklearn <code>Pipeline</code>. It uses two features:</p>
+    <ul>
+      <li><code>raw_acc:magnitude_stats:std</code> (quantitative): phone shaking. We fill missing values with the training median.</li>
+      <li><code>hour</code> (nominal, 0 to 23): the hour of the day, one-hot encoded.</li>
+    </ul>
+    <p>On the 12 test users, the baseline gets a macro F1 of 0.387 and 67.4% accuracy. Always guessing "sitting" gets a macro F1 of 0.106. The training macro F1 is 0.386, almost the same as on the test users.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>body state</th><th>precision</th><th>recall</th><th>F1</th><th>test minutes</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">lying down</th><td>0.87</td><td>0.66</td><td>0.75</td><td>17,191</td></tr>
+          <tr><th scope="row">sitting</th><td>0.62</td><td>0.94</td><td>0.74</td><td>25,473</td></tr>
+          <tr><th scope="row">walking</th><td>0.68</td><td>0.33</td><td>0.45</td><td>5,691</td></tr>
+          <tr><th scope="row">running</th><td>0.76</td><td>0.23</td><td>0.35</td><td>123</td></tr>
+          <tr><th scope="row">bicycling</th><td>0.02</td><td>0.02</td><td>0.02</td><td>347</td></tr>
+          <tr><th scope="row">standing</th><td>0.22</td><td>0.01</td><td>0.01</td><td>6,179</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>For the final model, we plan to add the watch accelerometer, gyroscope, audio, location speed and phone-state features. Phone orientation (<code>raw_acc:3d:mean_x/y/z</code>) might help separate sitting, standing and lying down. We'll also add a column that marks when the watch is missing, since that depends on body state, and each user's motion over the previous few minutes. For the model itself, we'll try a random forest or gradient boosting, tuned with <code>GridSearchCV</code> and <code>GroupKFold</code> by user and scored by macro F1.</p>
+
+    <h2 id="final-model">Final Model</h2>
+    <p>In progress.</p>
+
+    <h2 id="fairness-analysis">Fairness Analysis</h2>
+    <p>In progress.</p>
+
+  </div>
+
+</article>
+
+</main>
+</body>
+</html>
