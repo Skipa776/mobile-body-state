@@ -43,8 +43,10 @@ if(h.dataset.page==='home'&&!sessionStorage.getItem('dp-seen')){sessionStorage.s
       <li><code>label:LYING_DOWN</code>, <code>label:SITTING</code>, <code>label:OR_standing</code>, <code>label:FIX_walking</code>, <code>label:FIX_running</code>, <code>label:BICYCLING</code>: the body state the person reported for that minute (1 = yes, 0 = no, blank = not reported).</li>
       <li><code>raw_acc:magnitude_stats:std</code>: phone shaking, or how much the phone's acceleration varied during the recording, in G.</li>
       <li><code>watch_acceleration:magnitude_stats:std</code>: the same measure for the watch, in milli-G.</li>
+      <li><code>raw_acc:3d:mean_z</code>: the phone's average acceleration along the axis that points out of the screen, in G. When the phone is still, this is gravity.</li>
       <li><code>timestamp</code>: when the minute was recorded, in Unix seconds (UTC).</li>
       <li><code>uuid</code>: an anonymous ID for each user.</li>
+      <li>Phone type (iPhone or Android), which comes from the dataset's <code>cv_5_folds</code> files.</li>
     </ul>
 
     <h2 id="data-cleaning-and-exploratory-data-analysis">Data Cleaning and Exploratory Data Analysis</h2>
@@ -54,6 +56,7 @@ if(h.dataset.page==='home'&&!sessionStorage.getItem('dp-seen')){sessionStorage.s
       <li>We dropped 4 columns that have the same value in every row.</li>
       <li>We converted timestamps to San Diego time and added <code>hour</code> and <code>weekday</code> columns.</li>
       <li>We added each user's phone type. 34 users had iPhones and 26 had Androids.</li>
+      <li>iPhones and Androids point the accelerometer's axes in opposite directions, so we flipped the sign of the iPhone readings in <code>raw_acc:3d:mean_x</code>, <code>raw_acc:3d:mean_y</code> and <code>raw_acc:3d:mean_z</code> to match Android.</li>
       <li>We dropped the other 45 labels and <code>label_source</code>. People reported these at the same moment as their body state, so a model wouldn't have them when it makes a prediction.</li>
       <li>We kept the 306,594 minutes that have a body state, which still covers all 60 users. Missing sensor values stay missing.</li>
     </ul>
@@ -105,14 +108,19 @@ if(h.dataset.page==='home'&&!sessionStorage.getItem('dp-seen')){sessionStorage.s
     <iframe src="assets/watch-missing.html" width="100%" height="440" frameborder="0"></iframe>
 
     <h2 id="hypothesis-testing">Hypothesis Testing</h2>
+    <p>Does the phone type change what the sensors report when people are doing the same thing? This matters because the final model will use phone orientation, and the fairness analysis compares iPhone and Android users.</p>
+    <p>We look at the z-axis of the accelerometer (<code>raw_acc:3d:mean_z</code>), which points out of the screen. When a phone is still, this reading is gravity: about +1 G when the phone lies screen-up and −1 G when it lies screen-down. We only use sitting minutes, so both groups are doing the same thing, and for each of the 60 users we compute the share of their sitting minutes with a positive z reading.</p>
     <ul>
-      <li>Null hypothesis: among sitting and standing minutes, phone shaking has the same distribution, and any difference is due to random chance.</li>
-      <li>Alternative hypothesis: phone shaking tends to be higher when people are standing than when they are sitting.</li>
-      <li>Test statistic: the difference in median phone shaking, standing minus sitting. We use medians because phone shaking is heavily skewed.</li>
-      <li>Significance level: 0.05, with 1,000 shuffles of the sitting and standing labels.</li>
+      <li>Null hypothesis: among sitting minutes, a user's share of positive z readings has the same distribution for iPhone users and Android users, and any difference is due to random chance in which users have which phone.</li>
+      <li>Alternative hypothesis: the share of positive z readings is different for iPhone users and Android users.</li>
+      <li>Test statistic: the absolute difference between the two groups' mean share. We had no reason to expect either phone type to be higher, so the test has no direction.</li>
+      <li>Significance level: 0.05.</li>
     </ul>
-    <p>The observed difference is 0.00313 G, and the largest shuffled difference is 0.00013 G. The p-value is below 0.001, so we reject the null hypothesis. The data suggest phones tend to shake more when people stand than when they sit, and the pattern holds per user too: 41 of 60 users shake their phone more when standing (p-value 0.0029). The gap is small, though, and the two distributions overlap a lot.</p>
-    <iframe src="assets/permutation-test.html" width="100%" height="440" frameborder="0"></iframe>
+    <p>Phone type belongs to a person, not to a minute, so we use one number per user and shuffle the phone types across the 60 users 10,000 times. Shuffling minutes would treat one person's thousands of minutes as independent.</p>
+    <iframe src="assets/z-sign-by-os.html" width="100%" height="440" frameborder="0"></iframe>
+    <p>Each dot is one user. The average iPhone user has a positive z reading in 83.9% of their sitting minutes, and the average Android user in 82.0%.</p>
+    <iframe src="assets/os-permutation-test.html" width="100%" height="440" frameborder="0"></iframe>
+    <p>The observed difference is 0.019. About 64% of the shuffled differences are at least that large, so the p-value is 0.639, well above 0.05, and we fail to reject the null hypothesis. The data are consistent with iPhone and Android users holding their phones the same way while sitting. Repeating the test within each of the six body states gives the same answer, with p-values between 0.20 and 0.91.</p>
 
     <h2 id="framing-a-prediction-problem">Framing a Prediction Problem</h2>
     <p>We predict each minute's body state from that minute's sensor readings. This is multiclass classification with six classes, and the response variable is <code>body_state</code>.</p>
